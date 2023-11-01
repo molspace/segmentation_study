@@ -36,7 +36,7 @@ writer = SummaryWriter(log_dir=os.path.join("./tb", experiment_name))
 
 
 # Train and val splits
-train_dataset, valid_dataset = random_split(dataset=dataset, lengths=[0.8, 0.2], generator=torch.Generator().manual_seed(random_state)
+train_dataset, valid_dataset = random_split(dataset=dataset, lengths=[0.8, 0.2], generator=torch.Generator().manual_seed(random_state))
 print(f'Train data len: {len(train_dataset)}, validation data len: {len(valid_dataset)}')
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 valid_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
@@ -47,7 +47,7 @@ opt = torch.optim.Adam(model.parameters(), lr=lr)
 for epoch in range(n_epochs):
     model.train()
     n_iters = 0
-    batch_losses = []
+    batch_dices_train = []
 
     for batch in tqdm(train_dataloader):
 
@@ -58,43 +58,57 @@ for epoch in range(n_epochs):
         # forward
         mask_pred_batch = model(image_batch)
         loss = criterion(mask_pred_batch, mask_batch)
-        
+        dice_score = dice(mask_pred_batch, mask_batch, average='micro') 
+        batch_dices_train.append(dice_score.item())
+
         # optimize
         opt.zero_grad()
+        # calculate gradients - backward pass
         loss.backward()
+        # update weights
         opt.step()
         
         # dump statistics
         writer.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + n_iters)
+        writer.add_scalar("train/dice", dice_score.item(), global_step=epoch * len(train_dataloader) + n_iters)
         
         # if n_iters % 50 == 0:
         #     writer.add_image('train/image', make_grid(image_batch) * 0.5 + 0.5, epoch * len(train_dataloader) + n_iters)
         #     writer.add_image('train/mask_pred', make_grid(mask_pred_batch) * 0.5 + 0.5, epoch * len(train_dataloader) + n_iters)
         #     writer.add_image('train/mask_gt', make_grid(mask_batch) * 0.5 + 0.5, epoch * len(train_dataloader) + n_iters)
         n_iters += 1
-    
+
+    dice_averaged = np.mean(batch_dices_train)
+    print(f"Epoch {epoch} train dice {dice_averaged}.")
     
     # validation
-    model.eval()
-    n_iters = 0
-    batch_losses = []
-    for batch in valid_dataloader:
-        image_batch, mask_batch = batch
-        image_batch, mask_batch = image_batch.to(device), mask_batch.to(device)
+    with torch.no_grad():
+        model.eval()
+        n_iters = 0
+        batch_losses = []
+        batch_dices_val = []
+        for batch in valid_dataloader:
+            image_batch, mask_batch = batch
+            image_batch, mask_batch = image_batch.to(device), mask_batch.to(device)
 
-        mask_pred_batch = model(image_batch)
+            mask_pred_batch = model(image_batch)
 
-        loss = criterion(mask_pred_batch, mask_batch)
-        batch_losses.append(loss.item())
-        
-        # if n_iters < 5:
-        #     writer.add_image(f'val_{n_iters}/image', make_grid(image_batch) * 0.5 + 0.5, epoch * len(valid_dataloader) + n_iters)
-        #     writer.add_image(f'val_{n_iters}/mask_pred', make_grid(mask_pred_batch) * 0.5 + 0.5, epoch * len(valid_dataloader) + n_iters)
-        #     writer.add_image(f'val_{n_iters}/mask_gt', make_grid(mask_batch) * 0.5 + 0.5, epoch * len(valid_dataloader) + n_iters)
-        # n_iters += 1
+            loss = criterion(mask_pred_batch, mask_batch)
+            batch_losses.append(loss.item())
+            
+            dice_score = dice(mask_pred_batch, mask_batch, average='micro')
+            batch_dices_val.append(dice_score.item())
+            
+            # if n_iters < 5:
+            #     writer.add_image(f'val_{n_iters}/image', make_grid(image_batch) * 0.5 + 0.5, epoch * len(valid_dataloader) + n_iters)
+            #     writer.add_image(f'val_{n_iters}/mask_pred', make_grid(mask_pred_batch) * 0.5 + 0.5, epoch * len(valid_dataloader) + n_iters)
+            #     writer.add_image(f'val_{n_iters}/mask_gt', make_grid(mask_batch) * 0.5 + 0.5, epoch * len(valid_dataloader) + n_iters)
+            # n_iters += 1
     
     loss_averaged = np.mean(batch_losses)
     writer.add_scalar('val/loss_averaged', loss_averaged.item(), epoch)
+
+    dice_averaged = np.mean(batch_dices_val)
+    writer.add_scalar('val/dice_averaged', dice_averaged.item(), epoch)
     
-    iou = dice(mask_pred_batch, mask_batch, average='micro')
-    print(f"Epoch {epoch} validation iou {iou}.")
+    print(f"Epoch {epoch} validation dice {dice_averaged}.")

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+from configs import n_classes
 
 # UNetDownBlock: Conv + ReLU + Conv + ReLU + MaxPool
 class UNetDownBlock(nn.Module):
@@ -63,7 +63,7 @@ class UNet(nn.Module):
         ])
         self.final_block = nn.Sequential(
             #  nn.Conv2d(n_base_channels, 3, kernel_size=1, padding=0),
-            nn.Conv2d(n_base_channels, 2, kernel_size=1, padding=0),
+            nn.Conv2d(n_base_channels, n_classes, kernel_size=1, padding=0),
         )
 
 

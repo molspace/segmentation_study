@@ -12,18 +12,25 @@ import matplotlib.pyplot as plt
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-from configs import image_size, data_dir
+from configs import image_size, data_dir, visualize, augment
 
 
 
 # augment the input
 alb_transform = A.Compose([
-    #A.PadIfNeeded(min_height=image_size, min_width=image_size),
     A.Resize(image_size, image_size), 
     A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
     ToTensorV2()
 ])
-
+if augment:
+    alb_transform = A.Compose([
+        A.Resize(image_size, image_size), 
+        A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+        A.ShiftScaleRotate(shift_limit=0.2, scale_limit=0.2, rotate_limit=30, p=0.5),
+        A.RGBShift(r_shift_limit=25, g_shift_limit=25, b_shift_limit=25, p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=0.3, contrast_limit=0.3, p=0.5),
+        ToTensorV2()
+    ])
 
 # define main dataset class 
 class SegmentationDataset(Dataset):
@@ -55,7 +62,7 @@ class SegmentationDataset(Dataset):
                 transformed = self.transform(image=image, mask=mask)
                 image = transformed['image']
                 mask = transformed['mask']
-            return image, mask
+            return image, mask.long()
 
     def __len__(self):
         return len(self.img_files)
@@ -83,5 +90,5 @@ def visualize_augmentations(dataset, samples=5):
     plt.tight_layout()
     plt.show()
 
-
-visualize_augmentations(dataset, samples=5)
+if visualize:
+    visualize_augmentations(dataset, samples=5)
